@@ -1,5 +1,6 @@
 import os
 import typing
+import telebot
 import queue
 import time
 import datetime as dt
@@ -92,7 +93,7 @@ class App:
         self._user_service = US.UserService()
         self._events = queue.Queue()
         self._config = Config(config_path)
-        self._bot = bot.Bot(self._config.bot_token, self._create_session, self._user_service)
+        self._bot = bot.Bot(telebot.TeleBot(self._config.bot_token), self._create_session, self._user_service)
         self._bot_thread = BotThread(self._bot)
         self._timer = TimerThread(self._config.send_phrases_time, lambda: self._events.put(TimerEvent()))
 
@@ -101,12 +102,9 @@ class App:
     # before bot failure
     def start(self):
         self._bot_thread.start()
-        print('bot started')
         self._timer.start()
-        print('timer started')
         try:
             while True:
-                print('iteration')
                 try:
                     event = self._events.get(timeout=5)
                     if isinstance(event, TimerEvent):

@@ -33,9 +33,7 @@ class UserService:
         if role == models.Role.ADMIN and not user.is_admin():
             raise exceptions.RolesAreRequired(models.Role.ADMIN)
         # TODO: handle concurrent update
-        print('change role, before', user)
         user.set_role(role, state)
-        print('change role, after ', user)
         session.commit()
         
     def get_users_with_role(self, session, role: models.Role) -> list[models.User]:

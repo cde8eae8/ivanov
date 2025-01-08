@@ -82,3 +82,5 @@ def init_db():
         poolclass=StaticPool)
     Base.metadata.create_all(engine)
     return engine
+
+init_db_for_testing = init_db
