@@ -1,8 +1,11 @@
+from io import BytesIO
 import telebot
 from db import models
 import exceptions
 import user_service as US
+import phrases_service as PS
 import sqlalchemy
+import pandas as pd
 
 def _with_user(*, create: bool, require_roles: set[models.Role] | None=None):
     require_roles = require_roles or []
@@ -33,10 +36,11 @@ def _with_user(*, create: bool, require_roles: set[models.Role] | None=None):
     return _decorator
 
 class Bot:
-    def __init__(self, bot: telebot.TeleBot, create_session, user_service: US.UserService):
+    def __init__(self, bot: telebot.TeleBot, create_session, user_service: US.UserService, phrases_service: PS.PhrasesService):
         self._bot = bot
         self._create_session = create_session
         self._user_service = user_service
+        self._phrases_service = phrases_service
 
         message_handlers = (
             (self._start, {'start'}),
@@ -46,6 +50,8 @@ class Bot:
         )
         for handler, commands in message_handlers:
             self._bot.message_handler(commands=list(commands))(handler)
+        self._bot.message_handler(func=lambda _: True)(self._default_handler)
+        self.wait_for_file = {}
 
     def start_bot(self):
         # set error handler
@@ -55,7 +61,7 @@ class Bot:
         self._bot.stop_bot()
 
     @_with_user(create=True)
-    def _start(self, message, *, session, user):
+    def _start(self, message: telebot.types.Message, *, session, user):
         self._user_service.change_role(session, user, models.Role.SEND_PHRASES, True)
         if user.is_admin():
             self._bot.send_message(message.chat.id, "Hello! You're subscribed now.\nAnd you're an admin")
@@ -63,14 +69,47 @@ class Bot:
             self._bot.send_message(message.chat.id, "Hello! You're subscribed now")
 
     @_with_user(create=True)
-    def _stop(self, message, *, session, user):
+    def _stop(self, message: telebot.types.Message, *, session, user):
         self._user_service.change_role(session, user, models.Role.SEND_PHRASES, False)
         self._bot.send_message(message.chat.id, "You're unsubscribed now")
 
     @_with_user(create=False)
-    def _help(self, message, *, session, user):
+    def _help(self, message: telebot.types.Message, *, session, user):
         self._bot.send_message(message.chat.id, "Help")
 
     @_with_user(create=False, require_roles={models.Role.ADMIN})
-    def _edit(self, message, *, session, user):
-        self._bot.send_message(message.chat.id, "Reply to this message with a table with new phrases")
+    def _edit(self, message: telebot.types.Message, *, session, user):
+        sent_message = self._bot.send_message(message.chat.id, "Reply to this message with a table with new phrases")
+        self.wait_for_file[message.chat.id] = sent_message.id
+
+    @_with_user(create=False)
+    def _default_handler(self, message: telebot.types.Message, *, session, user):
+        if not user.is_admin():
+            return
+        if not message.reply_to_message:
+            return
+        message_id = self.wait_for_file.get(message.chat.id)
+        if message_id is None:
+            self._bot.send_message(message.chat.id, "Has no active edit request, send /edit command again")
+            return
+        if message_id != message.reply_to_message.id:
+            self._bot.send_message(message.chat.id, "Active edit request is bound to another message, send /edit command again")
+            return
+        file_info = self._bot.get_file(message.document.file_id)
+        if file_info.file_size > 200 * 1024:
+            self._bot.send_message(message.chat.id, "File is too big")
+            return
+        # TODO: maybe replace with database UI
+        file = self._bot.download_file(file_info.file_path)
+        if file_info.file_path.endswith('.csv'):
+            df = pd.read_csv(BytesIO(file))
+        elif file_info.file_path.endswith('.xlsx'):
+            df = pd.read_excel(BytesIO(file))
+        else:
+            self._bot.send_message(message.chat.id, "Bad file format")
+            return
+        if df.columns != ["Цитаты"]:
+            self._bot.send_message(message.chat.id, "Bad file format, expected 1 column 'Цитаты'")
+        phrases = df["Цитаты"].tolist()
+        self._phrases_service.add_phrases(session, phrases)
+        self.wait_for_file[message.chat.id] = None
