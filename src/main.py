@@ -1,4 +1,5 @@
 import os
+import traceback
 import typing
 import telebot
 import queue
@@ -76,7 +77,7 @@ class TimerThread:
 
     def _sleep(self, max_sleep: dt.timedelta):
         now = dt.datetime.now(tz=dt.timezone.utc)
-        if self._next_wakeup <= now:
+        if self._next_wakeup <= now or True:
             self._callback()
             self._next_wakeup += dt.timedelta(days=1)
         assert self._next_wakeup > now
@@ -91,9 +92,16 @@ class App:
         self._engine = models.init_db()
         self._create_session = scoped_session(sessionmaker(self._engine))
         self._user_service = US.UserService()
+        self._phrases_service = PS.PhrasesService()
+        self._phrases_service.add_phrases(self._create_session(), [
+            'p1',
+            'p2',
+            'p3',
+            'p4',
+        ])
         self._events = queue.Queue()
         self._config = Config(config_path)
-        self._bot = bot.Bot(telebot.TeleBot(self._config.bot_token), self._create_session, self._user_service)
+        self._bot = bot.Bot(telebot.TeleBot(self._config.bot_token), self._create_session, self._user_service, self._phrases_service)
         self._bot_thread = BotThread(self._bot)
         self._timer = TimerThread(self._config.send_phrases_time, lambda: self._events.put(TimerEvent()))
 
@@ -119,7 +127,20 @@ class App:
             print('exit')
 
     def _send_phrases(self):
-        print('send_phrases()')
+        with self._create_session() as session:
+            bot = telebot.TeleBot(self._config.bot_token)
+            for user_id, chat_id, phrase_id, phrase in \
+                    self._phrases_service.get_random_phrases(session):
+                message = phrase or 'We do not have phrases for you :('
+                bot.send_message(
+                    chat_id,
+                    text=message
+                )
+                session.execute(sqlalchemy
+                    .insert(models.UsedPhrases)
+                    .values(user_id=user_id, phrase_id=phrase_id))
+                # TODO: collect results and update database one time at the end
+                session.commit()
 
 
 if __name__ == "__main__":

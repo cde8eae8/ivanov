@@ -67,17 +67,17 @@ class Phrase(Base):
     id: Mapped[uuid.UUID] = mapped_column(Uuid(), primary_key=True, default=uuid.uuid4)
     text: Mapped[str] = mapped_column(String(100000))
 
-# association_table = Table(
-#     "used_phrases",
-#     Base.metadata,
-#     Column("user_id", ForeignKey("user_account.id")),
-#     Column("phrase_id", ForeignKey("phrase.id")),
-# )
+UsedPhrases = Table(
+    "used_phrases",
+    Base.metadata,
+    Column("user_id", ForeignKey("user_account.id")),
+    Column("phrase_id", ForeignKey("phrase.id")),
+)
 
-def init_db():
+def init_db(echo=False):
     engine = create_engine(
         "sqlite:///:memory:", 
-        echo=False, 
+        echo=echo, 
         connect_args={'check_same_thread':False},
         poolclass=StaticPool)
     Base.metadata.create_all(engine)

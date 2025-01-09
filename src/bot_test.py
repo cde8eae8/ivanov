@@ -9,6 +9,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.orm import scoped_session
 import user_service as US
 import phrases_service as PS
+from test_helpers import testing_db
 
 @dataclasses.dataclass
 class Chat:
@@ -86,17 +87,6 @@ def assert_compare_users(user, chat_id, is_admin, send_phrases):
     assert user.chat_id == chat_id 
     assert user._is_admin == is_admin
     assert user._send_phrases == send_phrases
-
-@dataclasses.dataclass
-class Database:
-    engine: sqlalchemy.Engine
-    session: typing.Callable[[], sqlalchemy.orm.Session]
-
-@pytest.fixture
-def testing_db():
-    engine = models.init_db_for_testing()
-    yield Database(engine, scoped_session(sessionmaker(engine)))
-    
 
 @dataclasses.dataclass
 class BotEnvironment:
