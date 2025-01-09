@@ -1,3 +1,4 @@
+import functools
 import sqlalchemy
 from sqlalchemy.orm import Session
 from db import models
@@ -20,8 +21,13 @@ class PhrasesService:
     def get_phrases(self, session):
         return session.query(models.Phrase).all()
 
+    def get_random_phrases(self, session):
+        return session.execute(PhrasesService._get_random_phrases_request()).all()
+
+    @functools.cache
     @staticmethod
-    def get_random_phrases(session):
+    def _get_random_phrases_request():
+        # somethind like
         # SELECT R.id as user_id, Result.phrase_id as phrase_id
         # FROM ((
         #   SELECT name, id 
@@ -50,7 +56,7 @@ class PhrasesService:
         not_yet_sent_phrases = (sqlalchemy
             .select(models.User.id, models.Phrase.id)
             .join(models.Phrase, sqlalchemy.literal(True))
-            .except_(session.query(models.UsedPhrases))).subquery()
+            .except_(sqlalchemy.select(models.UsedPhrases))).subquery()
         not_yet_sent_phrases_for_each_user = (sqlalchemy
             .select(users_to_send_phrases, aliased(models.Phrase, not_yet_sent_phrases).id)
             .join(
@@ -71,40 +77,4 @@ class PhrasesService:
                 aliased(models.Phrase, phrases).id,
                 isouter=True
             ))
-        
-        return session.execute(random_phrases).all()
-        active_users = sqlalchemy.select(models.User.id, models.User.chat_id).where(models.User._send_phrases)
-        all_phrases = (
-            sqlalchemy.select(models.User.id, models.Phrase.id)
-            .join(models.Phrase, sqlalchemy.literal(True))
-            .except_(session.query(models.UsedPhrases)))
-        active_users_subq = active_users.subquery()
-        all_phrases_subq = all_phrases.subquery()
-        user_alias = aliased(models.User, all_phrases_subq, name="user")
-        phrase_alias = aliased(models.Phrase, all_phrases_subq, name="phrase")
-        user_alias2 = aliased(models.User, active_users_subq, name="user2")
-        not_yet_sent_phrases_for_each_user = (sqlalchemy
-            .select(active_users_subq, phrase_alias.id)
-            .join(
-                all_phrases_subq, 
-                user_alias2.id == user_alias.id, isouter=True)
-            .order_by(sqlalchemy.func.random()))
-        get_phrases_subq = not_yet_sent_phrases_for_each_user.subquery()
-        user_alias3 = aliased(models.User, get_phrases_subq)
-
-        random_phrase_ids = sqlalchemy.select(get_phrases_subq).group_by(user_alias3.id)
-        grouped_phrases_subq = random_phrase_ids.subquery()
-        phrases_alias2 = aliased(models.Phrase, grouped_phrases_subq, name="phrase2")
-        texts = sqlalchemy.select(grouped_phrases_subq, models.Phrase).join(
-            models.Phrase,
-            phrases_alias2.id == models.Phrase.id)
-
-        #return grouped_phrases
-
-        return session.execute(texts).all()
-            # for user_id, chat_id, phrase_id in session.execute(self._get_random_phrases(session)).all():
-            #     # TODO: Move it to a join in _get_random_phrases
-            #     message = 'We do not have phrases for you :('
-            #     if phrase_id is not None:
-            #         phrase = session.query(models.Phrase).where(models.Phrase.id == phrase_id).one()
-            #         message = phrase.text
+        return random_phrases

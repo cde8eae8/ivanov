@@ -1,4 +1,5 @@
 import os
+import traceback
 import typing
 import telebot
 import queue
@@ -128,31 +129,18 @@ class App:
     def _send_phrases(self):
         with self._create_session() as session:
             bot = telebot.TeleBot(self._config.bot_token)
-            for user_id, chat_id, phrase_id, phrase in session.execute(self._get_random_phrases(session)).all():
-                # TODO: Move it to a join in _get_random_phrases
-                message = 'We do not have phrases for you :('
-                if phrase is not None:
-                    message = phrase.text
+            for user_id, chat_id, phrase_id, phrase in \
+                    self._phrases_service.get_random_phrases(session):
+                message = phrase or 'We do not have phrases for you :('
                 bot.send_message(
                     chat_id,
                     text=message
                 )
-                session.execute(sqlalchemy.insert(models.UsedPhrases).values(user_id=user_id, phrase_id=phrase_id))
+                session.execute(sqlalchemy
+                    .insert(models.UsedPhrases)
+                    .values(user_id=user_id, phrase_id=phrase_id))
                 # TODO: collect results and update database one time at the end
                 session.commit()
-            # for user_id, chat_id, phrase_id in session.execute(self._get_random_phrases(session)).all():
-            #     # TODO: Move it to a join in _get_random_phrases
-            #     message = 'We do not have phrases for you :('
-            #     if phrase_id is not None:
-            #         phrase = session.query(models.Phrase).where(models.Phrase.id == phrase_id).one()
-            #         message = phrase.text
-            #     bot.send_message(
-            #         chat_id,
-            #         text=message
-            #     )
-            #     session.execute(sqlalchemy.insert(models.UsedPhrases).values(user_id=user_id, phrase_id=phrase_id))
-            #     # TODO: collect results and update database one time at the end
-            #     session.commit()
 
 
 if __name__ == "__main__":
