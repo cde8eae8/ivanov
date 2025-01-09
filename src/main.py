@@ -17,8 +17,11 @@ import phrases_service as PS
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.orm import scoped_session
 
+DEFAULT_WORKING_DIR = pathlib.Path.home() / '.ivanov'
+
 class Config:
     bot_token: str
+    working_dir: pathlib.Path
     send_phrases_time: dt.time
 
     def __init__(self, config_path: pathlib.Path) -> None:
@@ -30,6 +33,7 @@ class Config:
 
         self.bot_token = self._config['token']
         self.send_phrases_time = dt.time.fromisoformat(self._config['send_phrases_time'])
+        self.working_dir = self._config.get('working_dir', DEFAULT_WORKING_DIR)
 
 class BotThread:
     def __init__(self, bot: bot.Bot):
@@ -89,7 +93,8 @@ class TimerEvent:
 
 class App:
     def __init__(self, config_path):
-        self._engine = models.init_db()
+        self._config = Config(config_path)
+        self._engine = models.init_db(f"sqlite:///{self._config.working_dir / "iv.db"}")
         self._create_session = scoped_session(sessionmaker(self._engine))
         self._user_service = US.UserService()
         self._phrases_service = PS.PhrasesService()
@@ -100,7 +105,6 @@ class App:
             'p4',
         ])
         self._events = queue.Queue()
-        self._config = Config(config_path)
         self._bot = bot.Bot(telebot.TeleBot(self._config.bot_token), self._create_session, self._user_service, self._phrases_service)
         self._bot_thread = BotThread(self._bot)
         self._timer = TimerThread(self._config.send_phrases_time, lambda: self._events.put(TimerEvent()))
@@ -144,6 +148,6 @@ class App:
 
 
 if __name__ == "__main__":
-    config = os.environ.get('IVANOV_CONFIG', pathlib.Path.home() / '.ivanov' / 'config.json')
+    config = os.environ.get('IVANOV_CONFIG', DEFAULT_WORKING_DIR / 'config.json')
     app = App(config)
     app.start()
