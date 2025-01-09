@@ -74,7 +74,13 @@ UsedPhrases = Table(
     Column("phrase_id", ForeignKey("phrase.id")),
 )
 
-def init_db(echo=False):
+def init_db(db_path):
+    print(f'Using database {db_path}')
+    engine = create_engine(db_path)
+    Base.metadata.create_all(engine)
+    return engine
+
+def init_db_for_testing(echo=False):
     engine = create_engine(
         "sqlite:///:memory:", 
         echo=echo, 
@@ -82,5 +88,3 @@ def init_db(echo=False):
         poolclass=StaticPool)
     Base.metadata.create_all(engine)
     return engine
-
-init_db_for_testing = init_db
