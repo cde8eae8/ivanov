@@ -50,7 +50,7 @@ class Bot:
         )
         for handler, commands in message_handlers:
             self._bot.message_handler(commands=list(commands))(handler)
-        self._bot.message_handler(func=lambda _: True)(self._default_handler)
+        self._bot.message_handler(func=lambda _: True, content_types=['document'])(self._default_handler)
         self.wait_for_file = {}
 
     def start_bot(self):

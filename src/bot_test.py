@@ -47,8 +47,9 @@ class MockTelebot:
         self.message_id = 0
         self.files = {}
 
-    def message_handler(self, commands=None, func=None):
-        return lambda handler: self.handlers.append((commands, func, handler))
+    def message_handler(self, commands=None, func=None, content_types=None):
+        content_types = content_types or []
+        return lambda handler: self.handlers.append((commands, func, content_types, handler))
 
     def send_message(self, chat_id, text):
         self.chats[chat_id].append(text)
@@ -64,8 +65,13 @@ class MockTelebot:
         pass
 
     def user_message(self, chat_id, text=None, reply_to=None, file=None):
-        for commands, func, handler in self.handlers:
+        for commands, func, content_types, handler in self.handlers:
             message = Message(-1-len(self.chats[chat_id]), Chat(chat_id), reply_to_message=reply_to, document=file)
+            message_content_types = []
+            if message.document:
+                message_content_types.append('document')
+            if content_types != message_content_types:
+                continue
             if commands and text in commands:
                 handler(message)
             elif func and func(message):

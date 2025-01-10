@@ -1,9 +1,6 @@
 import os
-import traceback
-import typing
 import telebot
 import queue
-import time
 import datetime as dt
 import threading
 import json
@@ -11,6 +8,7 @@ import pathlib
 import sqlalchemy
 
 import bot
+import timer
 from db import models
 import user_service as US
 import phrases_service as PS
@@ -22,7 +20,8 @@ DEFAULT_WORKING_DIR = pathlib.Path.home() / '.ivanov'
 class Config:
     bot_token: str
     working_dir: pathlib.Path
-    send_phrases_time: dt.time
+    start_time: dt.datetime
+    period_between_messages: dt.timedelta
 
     def __init__(self, config_path: pathlib.Path) -> None:
         if not config_path.is_file():
@@ -32,8 +31,13 @@ class Config:
             self._config = json.load(f)
 
         self.bot_token = self._config['token']
-        self.send_phrases_time = dt.time.fromisoformat(self._config['send_phrases_time'])
-        self.working_dir = self._config.get('working_dir', DEFAULT_WORKING_DIR)
+        self.working_dir = pathlib.Path(self._config.get('working_dir', DEFAULT_WORKING_DIR))
+        self.start_time = dt.datetime.fromisoformat(self._config['time']['start_time'])
+        period_between_messages = dt.datetime.strptime(self._config['time']['period_between_messages'],"%H:%M:%S")
+        self.period_between_messages = dt.timedelta(
+            hours=period_between_messages.hour, 
+            minutes=period_between_messages.minute, 
+            seconds=period_between_messages.second)
 
 class BotThread:
     def __init__(self, bot: bot.Bot):
@@ -51,63 +55,23 @@ class BotThread:
     def _do_start_bot(self):
         self._bot.start_bot()
 
-class TimerThread:
-    def __init__(self, time: dt.time, callback: typing.Callable[[], None]):
-        assert time.tzinfo
-        self._wakeup_time = time
-        self._callback = callback
-        self._thread = None
-        self._exited = threading.Event()
-        self._exited.clear()
-
-    def start(self):
-        assert not self._exited.is_set()
-        self._thread = threading.Thread(target=self._do_start)
-        self._thread.start()
-
-    def stop(self):
-        self._exited.set()
-        self._thread.join()
-
-    def _do_start(self):
-        now = dt.datetime.now(tz=dt.timezone.utc)
-        next_wakeup = now
-        next_wakeup = dt.datetime.combine(now, self._wakeup_time, self._wakeup_time.tzinfo)
-        if next_wakeup.time() < now.time():
-            next_wakeup += dt.timedelta(days=1)
-        self._next_wakeup = next_wakeup
-        while not self._exited.is_set():
-            self._sleep(dt.timedelta(seconds=5))
-
-    def _sleep(self, max_sleep: dt.timedelta):
-        now = dt.datetime.now(tz=dt.timezone.utc)
-        if self._next_wakeup <= now or True:
-            self._callback()
-            self._next_wakeup += dt.timedelta(days=1)
-        assert self._next_wakeup > now
-        sleep_time = min(self._next_wakeup - now, max_sleep)
-        time.sleep(sleep_time.total_seconds())
-
 class TimerEvent:
     pass
 
 class App:
     def __init__(self, config_path):
         self._config = Config(config_path)
+        self._config.working_dir.mkdir(exist_ok=True)
         self._engine = models.init_db(f"sqlite:///{self._config.working_dir / "iv.db"}")
         self._create_session = scoped_session(sessionmaker(self._engine))
         self._user_service = US.UserService()
         self._phrases_service = PS.PhrasesService()
-        self._phrases_service.add_phrases(self._create_session(), [
-            'p1',
-            'p2',
-            'p3',
-            'p4',
-        ])
         self._events = queue.Queue()
         self._bot = bot.Bot(telebot.TeleBot(self._config.bot_token), self._create_session, self._user_service, self._phrases_service)
         self._bot_thread = BotThread(self._bot)
-        self._timer = TimerThread(self._config.send_phrases_time, lambda: self._events.put(TimerEvent()))
+        self._timer = timer.TimerThread(
+            timer.PeriodicWakeupController(self._config.start_time, self._config.period_between_messages).next_wakeup,
+            lambda: self._events.put(TimerEvent()))
 
     # TODO maybe save for every user x phrase day when it was sended? 
     # it allows to distinguish users which already got phrase today 
