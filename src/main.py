@@ -128,6 +128,7 @@ class App:
         self._error_handlers = error_handler.ErrorHandlersService([])
         self._error_handlers.add_handler(error_handler.LoggerNotifier())
         if self._config.error_mail:
+            logging.info("Information about errors will be sent to %s", self._config.error_mail.to_addr)
             self._error_handlers.add_handler(
                 error_handler.MailErrorHandler(
                     self._config.error_mail.from_addr, 
@@ -242,7 +243,7 @@ class App:
         log_path.parent.mkdir(exist_ok=True)
         logging.basicConfig(
             level=logging.INFO,
-            format="%(asctime)s [%(levelname)s][%(threadName)s] %(message)s",
+            format="%(asctime)s [%(levelname)s][%(threadName)s] %(filename)s:%(lineno)d: %(message)s",
             handlers=[
                 logging.FileHandler(log_path, "a", "utf-8"),
                 logging.StreamHandler(),

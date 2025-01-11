@@ -30,7 +30,7 @@ class ErrorHandler:
 
 class LoggerNotifier(ErrorHandler):
     def notify(self, e: ExceptionInfo):
-        logger.exception(e.exception)
+        logger.error(''.join(traceback.format_exception(e.exception)))
 
 class TelegramErrorHandler(ErrorHandler):
     def __init__(self, token: str, admin_chats: list[int]):
