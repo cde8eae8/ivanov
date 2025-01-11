@@ -1,16 +1,22 @@
 import collections
 import contextlib
 import dataclasses
-import enum
-import os
-import telebot
-import queue
 import datetime as dt
-import threading
+import enum
 import json
+import logging
+import os
 import pathlib
+import sys
+import typing
+import telebot
+import threading
+import queue
+
 import sqlalchemy
 import sqlalchemy.exc
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import scoped_session
 
 import bot
 import error_handler
@@ -18,8 +24,8 @@ import timer
 from db import models
 import user_service as US
 import phrases_service as PS
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.orm import scoped_session
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_WORKING_DIR = pathlib.Path.home() / '.ivanov'
 
@@ -42,7 +48,7 @@ class Config:
     working_dir: pathlib.Path
     start_time: dt.datetime
     period_between_messages: dt.timedelta
-    error_mail: "Config.ErrorMail"
+    error_mail: typing.Optional["Config.ErrorMail"] = None
 
     def __init__(self, config_path: pathlib.Path) -> None:
         if not config_path.is_file():
@@ -59,7 +65,8 @@ class Config:
             hours=period_between_messages.hour, 
             minutes=period_between_messages.minute, 
             seconds=period_between_messages.second)
-        self.error_mail = Config.ErrorMail(**self._config['error_mail'])
+        if 'error_mail' in self._config:
+            self.error_mail = Config.ErrorMail(**self._config['error_mail'])
 
 class BotThread:
     def __init__(self, bot: bot.Bot):
@@ -67,7 +74,7 @@ class BotThread:
         self._bot_thread = None
 
     def start(self):
-        self._bot_thread = threading.Thread(target=self._do_start_bot)
+        self._bot_thread = threading.Thread(target=self._do_start_bot, name="BotThread")
         self._bot_thread.start()
 
     def stop(self):
@@ -95,16 +102,17 @@ class BotExceptionHandler(telebot.ExceptionHandler):
 class App:
     def __init__(self, config_path):
         self._config = Config(config_path)
-        self._error_handlers = error_handler.ErrorHandlersService(
-            [
-                error_handler.LoggerNotifier(),
+        self._setup_logger()
+        self._error_handlers = error_handler.ErrorHandlersService([])
+        self._error_handlers.add_handler(error_handler.LoggerNotifier())
+        if self._config.error_mail:
+            self._error_handlers.add_handler(
                 error_handler.MailErrorHandler(
                     self._config.error_mail.from_addr, 
                     self._config.error_mail.password, 
                     self._config.error_mail.to_addr, 
                     "Ivanov bot error"),
-            ]
-        )
+            )
         self._config.working_dir.mkdir(exist_ok=True)
         self._engine = models.init_db(f"sqlite:///{self._config.working_dir / "iv.db"}")
         self._create_session = scoped_session(sessionmaker(self._engine))
@@ -119,10 +127,11 @@ class App:
         self._events = queue.Queue()
         self._bot = bot.Bot(telebot.TeleBot(
             self._config.bot_token,
-            exception_handler=BotExceptionHandler()), self._create_session, self._user_service, self._phrases_service)
+            exception_handler=BotExceptionHandler(self._error_handlers)), self._create_session, self._user_service, self._phrases_service)
         self._bot_thread = BotThread(self._bot)
+        self._wakeup_controller = timer.PeriodicWakeupController(self._config.start_time, self._config.period_between_messages)
         self._timer = timer.TimerThread(
-            timer.PeriodicWakeupController(self._config.start_time, self._config.period_between_messages).next_wakeup,
+            self._wakeup_controller.next_wakeup,
             lambda: self._events.put(TimerEvent()))
 
     # TODO maybe save for every user x phrase day when it was sended? 
@@ -133,7 +142,7 @@ class App:
         self._timer.start()
         try:
             with (
-                contextlib.suppress(), 
+                contextlib.suppress(Exception),
                 self._error_handlers.notify_about_exceptions(unexpected_exception)):
                 while True:
                     try:
@@ -143,6 +152,9 @@ class App:
                     except queue.Empty:
                         pass
         finally:
+            logger.info('Exiting main loop...')
+            if e := sys.exception():
+                logger.exception(e)
             while True:
                 try:
                     threads = (self._bot_thread, self._timer)
@@ -150,14 +162,15 @@ class App:
                         thread.stop()
                     for thread in threads:
                         t = thread.python_thread()
-                        print(f'waiting for {t.name} thread...')
+                        logger.info(f'Waiting for {t.name} thread...')
                         if t.is_alive():
                             t.join()
                     break
                 except BaseException as e:
-                    print(f'{e} ignored, waiting for thread exit')
+                    logger.error('Exception %s ignored, waiting for thread exit', e)
 
     def _send_phrases(self):
+        logger.info(f'Woke up at {dt.datetime.now(dt.UTC)}, sending phrases')
         with self._create_session() as session:
             bot = telebot.TeleBot(self._config.bot_token)
             class SendResult(enum.Enum):
@@ -198,8 +211,23 @@ class App:
                 self._error_handlers.notify(expected_exception(RuntimeError(
                     f'no phrases for {len(messages)} users'
                 )))
-            # TODO: collect results and update database one time at the end
             session.commit()
+
+        logger.info('Next wakeup at %s', self._wakeup_controller.next_wakeup(dt.datetime.now(dt.UTC)))
+
+    def _setup_logger(self):
+        log_path = self._config.working_dir / f'{dt.datetime.now().timestamp()}.log'
+        logging.basicConfig(
+            level=logging.INFO,
+            format="%(asctime)s [%(levelname)s][%(threadName)s] %(message)s",
+            handlers=[
+                logging.FileHandler(log_path, "a", "utf-8"),
+                logging.StreamHandler(),
+            ],
+        )
+        logger = logging.getLogger(__name__)
+        logger.info("logging to %s", log_path)
+
 
 
 if __name__ == "__main__":

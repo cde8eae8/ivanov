@@ -13,7 +13,7 @@ class TimerThread:
 
     def start(self):
         assert not self._exited.is_set()
-        self._thread = threading.Thread(target=self._do_start)
+        self._thread = threading.Thread(target=self._do_start, name="Timer")
         self._thread.start()
 
     def stop(self):
@@ -26,7 +26,6 @@ class TimerThread:
     def _do_start(self):
         now = dt.datetime.now(dt.UTC)
         self._next_wakeup = self._get_next_wakeup_time(now)
-        print('next wakeup at', self._next_wakeup.isoformat())
         assert self._next_wakeup.tzinfo
         while not self._exited.is_set():
             self._sleep(dt.timedelta(seconds=5))
@@ -36,7 +35,6 @@ class TimerThread:
         if self._next_wakeup <= now:
             self._callback()
             self._next_wakeup = self._get_next_wakeup_time(now)
-            print('next wakeup at', self._next_wakeup.isoformat())
         assert self._next_wakeup > now
         sleep_time = min(self._next_wakeup - now, max_sleep)
         time.sleep(sleep_time.total_seconds())

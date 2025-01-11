@@ -1,3 +1,4 @@
+import logging
 import typing
 import uuid
 import enum 
@@ -8,12 +9,11 @@ from sqlalchemy import Column
 from sqlalchemy import ForeignKey
 from sqlalchemy import String
 from sqlalchemy import Uuid
-from sqlalchemy import Enum
-from sqlalchemy import ARRAY
 from sqlalchemy.orm import DeclarativeBase
 from sqlalchemy.orm import Mapped
 from sqlalchemy.orm import mapped_column
-from sqlalchemy.orm import relationship
+
+logger = logging.getLogger(__name__)
 
 ChatId = typing.NewType('ChatId', int)
 
@@ -75,7 +75,7 @@ UsedPhrases = Table(
 )
 
 def init_db(db_path):
-    print(f'Using database {db_path}')
+    logger.info(f'Using database {db_path}')
     engine = create_engine(db_path)
     Base.metadata.create_all(engine)
     return engine

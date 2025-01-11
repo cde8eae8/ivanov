@@ -92,9 +92,8 @@ class ErrorHandlersService:
     
     @contextlib.contextmanager
     def notify_about_exceptions(self, make_info: typing.Callable[[Exception], ExceptionInfo]):
-        collect_logs = collect_logs or (lambda: None)
         try:
             yield
-        except BaseException as e:
+        except Exception as e:
             self.notify(make_info(e))
         
