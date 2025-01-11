@@ -20,6 +20,9 @@ class TimerThread:
         self._exited.set()
         self._thread.join()
 
+    def python_thread(self):
+        return self._thread
+
     def _do_start(self):
         now = dt.datetime.now(dt.UTC)
         self._next_wakeup = self._get_next_wakeup_time(now)
