@@ -1,6 +1,7 @@
 import abc
 import contextlib
 import dataclasses
+import io
 import logging
 import shlex
 import sys
@@ -29,7 +30,7 @@ class ErrorHandler:
 
 class LoggerNotifier(ErrorHandler):
     def notify(self, e: ExceptionInfo):
-        logger.exception(e)
+        logger.exception(e.exception)
 
 class TelegramErrorHandler(ErrorHandler):
     def __init__(self, token: str, admin_chats: list[int]):
@@ -43,8 +44,8 @@ class TelegramErrorHandler(ErrorHandler):
             bot.send_message(
                 chat,
                 text=text_message)
-            for log in e.logs or []:
-                bot.send_document(chat, log)
+            for i, log in enumerate(e.logs or []):
+                bot.send_document(chat, telebot.types.InputFile(io.StringIO(log), f'log{i+1}.txt'))
 
 class MailErrorHandler(ErrorHandler):
     def __init__(self, addr_from, password, email, theme):

@@ -3,11 +3,13 @@ import contextlib
 import dataclasses
 import datetime as dt
 import enum
+import functools
 import json
 import logging
 import os
 import pathlib
 import sys
+import traceback
 import typing
 import telebot
 import threading
@@ -29,13 +31,33 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_WORKING_DIR = pathlib.Path.home() / '.ivanov'
 
-def expected_exception(e: Exception):
-    return error_handler.ExceptionInfo(e, True)
+def expected_exception(exception: Exception):
+    logging.getLoggerClass().root.handlers[0].baseFilename
+    logs = []
+    for handler in logger.root.handlers:
+        if isinstance(handler, logging.FileHandler):
+            try:
+                with open(handler.baseFilename, 'rb') as f:
+                    f.seek(0, os.SEEK_END)
+                    file_size = f.tell()
+                    read_size = min(1024*512, file_size)
+                    f.seek(-read_size, os.SEEK_END)
+                    logs.append(f.read(read_size).decode('utf-8', 'replace'))
+            except Exception as e:
+                logs.append(f'failed to read log file {''.join(traceback.format_exception(e))}')
+    return error_handler.ExceptionInfo(
+        exception, 
+        True,
+        logs=logs,
+        version=AppInfo.version)
 
 def unexpected_exception(e: Exception):
     info = expected_exception(e)
     info.was_expected = False
     return info
+
+class AppInfo:
+    version: str = (pathlib.Path(__file__).parent.parent / 'VERSION').read_text().strip()
 
 class Config:
     @dataclasses.dataclass
@@ -141,16 +163,16 @@ class App:
         self._bot_thread.start()
         self._timer.start()
         try:
-            with (
-                contextlib.suppress(Exception),
-                self._error_handlers.notify_about_exceptions(unexpected_exception)):
-                while True:
+            while True:
+                with (
+                    contextlib.suppress(Exception),
+                    self._error_handlers.notify_about_exceptions(unexpected_exception)):
                     try:
                         event = self._events.get(timeout=5)
-                        if isinstance(event, TimerEvent):
-                            self._send_phrases()
                     except queue.Empty:
-                        pass
+                        continue
+                    if isinstance(event, TimerEvent):
+                        self._send_phrases()
         finally:
             logger.info('Exiting main loop...')
             if e := sys.exception():
@@ -216,7 +238,8 @@ class App:
         logger.info('Next wakeup at %s', self._wakeup_controller.next_wakeup(dt.datetime.now(dt.UTC)))
 
     def _setup_logger(self):
-        log_path = self._config.working_dir / f'{dt.datetime.now().timestamp()}.log'
+        log_path = self._config.working_dir / 'logs' / f'{dt.datetime.now().timestamp()}.log'
+        log_path.parent.mkdir(exist_ok=True)
         logging.basicConfig(
             level=logging.INFO,
             format="%(asctime)s [%(levelname)s][%(threadName)s] %(message)s",
