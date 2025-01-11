@@ -1,1 +1,4 @@
+-r requirements.txt
+paramiko==3.5.0
 pytest==8.3.4
+scp==0.15.0
