@@ -12,6 +12,11 @@ from sqlalchemy import update
 class UserService:
     def __init__(self):
         pass
+
+    def get_admin_chats(self, session) -> list[models.ChatId] | None:
+        stmt = select(models.User).where(models.User._is_admin)
+        admins = session.execute(stmt).all()
+        return [u[0].chat_id for u in admins]
         
     def get_user(self, session, chat_id: models.ChatId) -> models.User | None:
         stmt = select(models.User).where(models.User.chat_id == chat_id)
@@ -35,7 +40,3 @@ class UserService:
         # TODO: handle concurrent update
         user.set_role(role, state)
         session.commit()
-        
-    def get_users_with_role(self, session, role: models.Role) -> list[models.User]:
-        stmt = select(models.User).where(role in models.User.roles)
-        return list(session.execute(stmt).all())
