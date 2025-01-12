@@ -1,6 +1,7 @@
 import abc
 import contextlib
 import dataclasses
+import getpass
 import io
 import logging
 import shlex
@@ -76,6 +77,7 @@ def _get_default_message(e: ExceptionInfo):
         message += "UNEXPECTED ERROR\n\n"
     message += f"Error {str(e.exception)}\n\n"
     message += "".join(traceback.format_exception(e.exception))
+    message += f"user: {getpass.getuser()}\n"
     message += f"command_line: {e._command_line}\n"
     if e.version:
         message += f"version: {e.version}\n"
