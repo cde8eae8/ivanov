@@ -123,6 +123,7 @@ def test_send_phrases(tmp_path, testing_db):
     app_thread.stop()
     assert set(test_bot.chats[user.chat_id][1:]) == {NO_PHRASES}
     assert set(test_bot.chats[user2.chat_id][2:]) == {NO_PHRASES}
-    assert len(set(test_bot.chats[admin.chat_id])) == 2
-    assert re.match("Error no phrases for 1 users.*", test_bot.chats[admin.chat_id][0])
-    assert re.match("Error no phrases for 2 users.*", test_bot.chats[admin.chat_id][1])
+    assert len(set(test_bot.chats[admin.chat_id])) == 3
+    assert re.match(".*ivanov bot started.*", test_bot.chats[admin.chat_id][0])
+    assert re.match("Error no phrases for 1 users.*", test_bot.chats[admin.chat_id][1])
+    assert re.match("Error no phrases for 2 users.*", test_bot.chats[admin.chat_id][2])

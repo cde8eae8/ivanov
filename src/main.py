@@ -175,6 +175,9 @@ class App:
                 self._user_service.get_admin_chats(self._create_session()),
             )
         )
+        self._error_handlers.notify(
+            expected_exception(RuntimeError("ivanov bot started"))
+        )
         self._phrases_service = factories.phrases_service()
         self._events = queue.Queue()
         self._bot = bot.Bot(
