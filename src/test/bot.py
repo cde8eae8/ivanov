@@ -60,6 +60,9 @@ class MockTelebot:
         self._notify(lambda o: o.on_message(True, message))
         return message
 
+    def send_document(self, chat, file):
+        pass
+
     def infinity_polling(self):
         pass
 
