@@ -1,7 +1,7 @@
 import logging
 import typing
 import uuid
-import enum 
+import enum
 from sqlalchemy import Table
 from sqlalchemy import StaticPool
 from sqlalchemy import create_engine
@@ -15,14 +15,17 @@ from sqlalchemy.orm import mapped_column
 
 logger = logging.getLogger(__name__)
 
-ChatId = typing.NewType('ChatId', int)
+ChatId = typing.NewType("ChatId", int)
+
 
 class Base(DeclarativeBase):
     pass
 
+
 class Role(enum.Enum):
-    ADMIN = 'ADMIN'
-    SEND_PHRASES = 'SEND_PHRASES'
+    ADMIN = "ADMIN"
+    SEND_PHRASES = "SEND_PHRASES"
+
 
 class User(Base):
     __tablename__ = "user_account"
@@ -37,13 +40,13 @@ class User(Base):
 
     def send_phrases(self):
         return self._send_phrases
-        
+
     def has_role(self, role: Role) -> bool:
         if role == Role.ADMIN:
             return self._is_admin
         elif role == Role.SEND_PHRASES:
             return self._send_phrases
-        assert False, f'{role} <- {state}'
+        assert False, role
 
     def set_role(self, role: Role, state: bool) -> None:
         if role == Role.ADMIN:
@@ -51,14 +54,14 @@ class User(Base):
         elif role == Role.SEND_PHRASES:
             self._send_phrases = state
         else:
-            assert False, f'{role} <- {state}'
+            assert False, f"{role} <- {state}"
 
     def __str__(self):
         roles = []
         for role in set(Role):
             if self.has_role(role):
                 roles.append(role.value)
-        return f'User(chat_id={self.chat_id}, roles={roles})'
+        return f"User(chat_id={self.chat_id}, roles={roles})"
 
 
 class Phrase(Base):
@@ -67,6 +70,7 @@ class Phrase(Base):
     id: Mapped[uuid.UUID] = mapped_column(Uuid(), primary_key=True, default=uuid.uuid4)
     text: Mapped[str] = mapped_column(String(100000))
 
+
 UsedPhrases = Table(
     "used_phrases",
     Base.metadata,
@@ -74,17 +78,20 @@ UsedPhrases = Table(
     Column("phrase_id", ForeignKey("phrase.id")),
 )
 
+
 def init_db(db_path):
-    logger.info(f'Using database {db_path}')
+    logger.info(f"Using database {db_path}")
     engine = create_engine(db_path)
     Base.metadata.create_all(engine)
     return engine
 
+
 def init_db_for_testing(echo=False):
     engine = create_engine(
-        "sqlite:///:memory:", 
-        echo=echo, 
-        connect_args={'check_same_thread':False},
-        poolclass=StaticPool)
+        "sqlite:///:memory:",
+        echo=echo,
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
     Base.metadata.create_all(engine)
     return engine

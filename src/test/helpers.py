@@ -7,13 +7,14 @@ from sqlalchemy.orm import sessionmaker
 
 from db import models
 
+
 @dataclasses.dataclass
 class Database:
     engine: sqlalchemy.Engine
     session: typing.Callable[[], sqlalchemy.orm.Session]
 
+
 @pytest.fixture
 def testing_db():
     engine = models.init_db_for_testing()
     yield Database(engine, scoped_session(sessionmaker(engine)))
-    

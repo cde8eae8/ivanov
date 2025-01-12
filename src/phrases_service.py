@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from db import models
 from sqlalchemy.orm import aliased
 
+
 class PhrasesService:
     def add_phrases(self, session: Session, new_phrases: list[str]):
         old_phrases = set(phrase.text for phrase in self.get_phrases(session))
@@ -14,7 +15,7 @@ class PhrasesService:
         if phrases_to_insert:
             session.execute(
                 sqlalchemy.insert(models.Phrase),
-                [ { "text": text } for text in phrases_to_insert ]
+                [{"text": text} for text in phrases_to_insert],
             )
             session.commit()
 
@@ -30,26 +31,28 @@ class PhrasesService:
         # somethind like
         # SELECT R.id as user_id, Result.phrase_id as phrase_id
         # FROM ((
-        #   SELECT name, id 
-        #   FROM EMPLOYEE 
+        #   SELECT name, id
+        #   FROM EMPLOYEE
         #   WHERE dept = 1
         # ) AS R
         # LEFT JOIN (
         #   SELECT U.id AS user_id, PHRASE.id AS phrase_id
         #   FROM (
-        #     SELECT name, id 
-        #     FROM EMPLOYEE 
+        #     SELECT name, id
+        #     FROM EMPLOYEE
         #     WHERE dept = 1
         #   ) U
         #   CROSS JOIN PHRASE
-        #   EXCEPT 
-        #   SELECT user_id, phrase_id 
+        #   EXCEPT
+        #   SELECT user_id, phrase_id
         #   FROM USED_PHRASE
         # ) AS L
         # ON L.user_id = R.id
         # ) AS Result
         # order by random()
         # ) group by user_id;
+
+        # fmt: off
         users_to_send_phrases = (sqlalchemy
             .select(models.User.id, models.User.chat_id)
             .where(models.User._send_phrases)).subquery()
@@ -77,4 +80,5 @@ class PhrasesService:
                 aliased(models.Phrase, phrases).id,
                 isouter=True
             ))
+        # fmt: on
         return random_phrases
