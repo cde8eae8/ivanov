@@ -60,7 +60,7 @@ class PhrasesService:
         not_yet_sent_phrases = (sqlalchemy
             .select(models.User.id, models.Phrase.id)
             .join(models.Phrase, sqlalchemy.literal(True))
-            .except_(sqlalchemy.select(models.UsedPhrases))).subquery()
+            .except_(sqlalchemy.select(models.UsedPhrases.user_id, models.UsedPhrases.phrase_id))).subquery()
         not_yet_sent_phrases_for_each_user = (sqlalchemy
             .select(users_to_send_phrases, aliased(models.Phrase, not_yet_sent_phrases).id)
             .join(

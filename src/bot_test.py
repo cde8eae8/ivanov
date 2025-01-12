@@ -198,7 +198,9 @@ def test_bot_add_phrases_errors_no_message_to_reply(testing_db, bot_environment)
 
     admin = 1000
     session = testing_db.session()
-    session.add(models.User(chat_id=admin, _is_admin=True, _send_phrases=False))
+    session.add(
+        models.User(chat_id=admin, username="", _is_admin=True, _send_phrases=False)
+    )
     session.commit()
 
     message = bot.user_message(admin, "some message")
@@ -244,7 +246,9 @@ def test_bot_add_phrases_errors_bad_file_format(testing_db, bot_environment):
 
     admin = 1000
     session = testing_db.session()
-    session.add(models.User(chat_id=admin, _is_admin=True, _send_phrases=False))
+    session.add(
+        models.User(chat_id=admin, username="", _is_admin=True, _send_phrases=False)
+    )
     session.commit()
 
     n_messages = 0
@@ -286,7 +290,9 @@ def test_bot_add_phrases_no_phrases(testing_db, bot_environment):
 
     admin = 1000
     session = testing_db.session()
-    session.add(models.User(chat_id=admin, _is_admin=True, _send_phrases=False))
+    session.add(
+        models.User(chat_id=admin, username="", _is_admin=True, _send_phrases=False)
+    )
     session.commit()
 
     n_messages = 0

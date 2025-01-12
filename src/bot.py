@@ -16,8 +16,17 @@ def _with_user(*, create: bool, require_roles: set[models.Role] | None = None):
                 with self._create_session() as session:
                     user_service: US.UserService = self._user_service
                     user = user_service.get_user(session, message.chat.id)
+                    username = None
+                    if message.from_user:
+                        username = message.from_user.username
                     if not user and create:
-                        user = user_service.create_user(session, message.chat.id)
+                        user = user_service.create_user(
+                            session, message.chat.id, username
+                        )
+                    if username is not None and user.username is None:
+                        user.username = username
+                        session.commit()
+                        session.refresh(user)
                     if require_roles:
                         if not user:
                             raise exceptions.RolesAreRequired(require_roles)

@@ -10,6 +10,11 @@ class Chat:
 
 
 @dataclasses.dataclass
+class User:
+    username: str
+
+
+@dataclasses.dataclass
 class File:
     file_id: str
 
@@ -30,6 +35,7 @@ class FileInfo:
 class Message:
     id: int
     chat: Chat
+    from_user: User | None = None
     text: typing.Optional[str] = None
     reply_to_message: typing.Optional["Message"] = None
     document: File | None = None
@@ -50,6 +56,7 @@ class MockTelebot:
         self.message_id = 0
         self.files = {}
         self._observers = []
+        self._chat_to_user = {}
 
     def add_observer(self, observer: MockTelebotObserver):
         self._observers.append(observer)
@@ -77,11 +84,16 @@ class MockTelebot:
     def stop_bot(self):
         pass
 
+    def add_user(self, chat_id, user: User):
+        self._chat_to_user[chat_id] = user
+
     def user_message(self, chat_id, text=None, reply_to=None, file=None):
         for commands, func, content_types, handler in self.handlers:
+            user = self._chat_to_user.get(chat_id)
             message = Message(
                 -1 - len(self.chats[chat_id]),
                 Chat(chat_id),
+                from_user=user,
                 reply_to_message=reply_to,
                 document=file,
             )

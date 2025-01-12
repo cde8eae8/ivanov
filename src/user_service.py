@@ -20,10 +20,12 @@ class UserService:
             return None
         return user[0]
 
-    def create_user(self, session, chat_id: models.ChatId) -> models.User:
+    def create_user(
+        self, session, chat_id: models.ChatId, username: str
+    ) -> models.User:
         # TODO: handle concurrent insertion of one user
         # TODO: make session external to functions (see sqlalchemy docs)
-        user = models.User(chat_id=chat_id)
+        user = models.User(chat_id=chat_id, username=username)
         session.add(user)
         session.commit()
         session.refresh(user)
