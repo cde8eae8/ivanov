@@ -3,7 +3,7 @@ from db import models
 import collections
 import sqlalchemy
 from phrases_service import PhrasesService
-from test_helpers import testing_db
+from test.test_helpers import testing_db
 
 @dataclasses.dataclass
 class DatabaseState:

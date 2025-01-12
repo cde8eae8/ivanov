@@ -67,6 +67,7 @@ class Phrase(Base):
     id: Mapped[uuid.UUID] = mapped_column(Uuid(), primary_key=True, default=uuid.uuid4)
     text: Mapped[str] = mapped_column(String(100000))
 
+
 UsedPhrases = Table(
     "used_phrases",
     Base.metadata,

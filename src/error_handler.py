@@ -33,12 +33,12 @@ class LoggerNotifier(ErrorHandler):
         logger.error(''.join(traceback.format_exception(e.exception)))
 
 class TelegramErrorHandler(ErrorHandler):
-    def __init__(self, token: str, admin_chats: list[int]):
-        self.token = token
+    def __init__(self, create_bot, admin_chats: list[int]):
+        self._create_bot = create_bot 
         self.admin_chats = admin_chats
 
     def notify(self, e: ExceptionInfo):
-        bot = telebot.TeleBot(token=self.token)
+        bot = self._create_bot()
         text_message = _get_default_message(e)
         for chat in self.admin_chats:
             bot.send_message(
@@ -76,8 +76,8 @@ def _get_default_message(e: ExceptionInfo):
     return message
 
 class ErrorHandlersService:
-    def __init__(self, handlers: list[ErrorHandler]):
-        self._handlers = handlers
+    def __init__(self, handlers: list[ErrorHandler]|None = None):
+        self._handlers = handlers or []
 
     def add_handler(self, handler: ErrorHandler):
         self._handlers.append(handler)

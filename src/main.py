@@ -32,7 +32,6 @@ logger = logging.getLogger(__name__)
 DEFAULT_WORKING_DIR = pathlib.Path.home() / '.ivanov'
 
 def expected_exception(exception: Exception):
-    logging.getLoggerClass().root.handlers[0].baseFilename
     logs = []
     for handler in logger.root.handlers:
         if isinstance(handler, logging.FileHandler):
@@ -111,6 +110,9 @@ class BotThread:
 class TimerEvent:
     pass
 
+class ExitEvent:
+    pass
+
 class BotExceptionHandler(telebot.ExceptionHandler):
     def __init__(self, error_handler: error_handler.ErrorHandlersService):
         self._error_handler = error_handler
@@ -120,12 +122,21 @@ class BotExceptionHandler(telebot.ExceptionHandler):
             unexpected_exception(e)
         )
         
+class ServiceFactories:
+    error_handlers = staticmethod(error_handler.ErrorHandlersService)
+    user_service = staticmethod(US.UserService)
+    phrases_service = staticmethod(PS.PhrasesService)
+    init_db = staticmethod(models.init_db)
+    create_bot = staticmethod(telebot.TeleBot)
+
+
 
 class App:
-    def __init__(self, config_path):
+    def __init__(self, factories: ServiceFactories, config_path: pathlib.Path) -> None:
+        self._factories = factories
         self._config = Config(config_path)
         self._setup_logger()
-        self._error_handlers = error_handler.ErrorHandlersService([])
+        self._error_handlers = factories.error_handlers()
         self._error_handlers.add_handler(error_handler.LoggerNotifier())
         if self._config.error_mail:
             logging.info("Information about errors will be sent to %s", self._config.error_mail.to_addr)
@@ -137,18 +148,18 @@ class App:
                     "Ivanov bot error"),
             )
         self._config.working_dir.mkdir(exist_ok=True)
-        self._engine = models.init_db(f"sqlite:///{self._config.working_dir / 'iv.db'}")
+        self._engine = factories.init_db(f"sqlite:///{self._config.working_dir / 'iv.db'}")
         self._create_session = scoped_session(sessionmaker(self._engine))
-        self._user_service = US.UserService()
+        self._user_service = factories.user_service()
         self._error_handlers.add_handler(
             error_handler.TelegramErrorHandler(
-                self._config.bot_token,
+                lambda: self._factories.create_bot(token=self._config.bot_token),
                 self._user_service.get_admin_chats(self._create_session())
             )
         )
-        self._phrases_service = PS.PhrasesService()
+        self._phrases_service = factories.phrases_service()
         self._events = queue.Queue()
-        self._bot = bot.Bot(telebot.TeleBot(
+        self._bot = bot.Bot(factories.create_bot(
             self._config.bot_token,
             exception_handler=BotExceptionHandler(self._error_handlers)), self._create_session, self._user_service, self._phrases_service)
         self._bot_thread = BotThread(self._bot)
@@ -174,6 +185,8 @@ class App:
                         continue
                     if isinstance(event, TimerEvent):
                         self._send_phrases()
+                    elif isinstance(event, ExitEvent):
+                        break
         finally:
             logger.info('Exiting main loop...')
             if e := sys.exception():
@@ -192,10 +205,13 @@ class App:
                 except BaseException as e:
                     logger.error('Exception %s ignored, waiting for thread exit', e)
 
+    def stop(self):
+        self._events.put(ExitEvent())
+
     def _send_phrases(self):
         logger.info(f'Woke up at {dt.datetime.now(dt.UTC)}, sending phrases')
         with self._create_session() as session:
-            bot = telebot.TeleBot(self._config.bot_token)
+            bot = self._factories.create_bot(self._config.bot_token)
             class SendResult(enum.Enum):
                 SUCCESS = 1
                 NO_PHRASES = 2
@@ -256,5 +272,5 @@ class App:
 
 if __name__ == "__main__":
     config = os.environ.get('IVANOV_CONFIG', DEFAULT_WORKING_DIR / 'config.json')
-    app = App(config)
+    app = App(ServiceFactories(), config)
     app.start()
