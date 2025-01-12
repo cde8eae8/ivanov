@@ -60,7 +60,7 @@ class Bot:
         for handler, commands in message_handlers:
             self._bot.message_handler(commands=list(commands))(handler)
         self._bot.message_handler(func=lambda _: True, content_types=["document"])(
-            self._default_handler
+            self._document_handler
         )
         self.wait_for_file = {}
 
@@ -98,7 +98,7 @@ class Bot:
         self.wait_for_file[message.chat.id] = sent_message.id
 
     @_with_user(create=False)
-    def _default_handler(self, message: telebot.types.Message, *, session, user):
+    def _document_handler(self, message: telebot.types.Message, *, session, user):
         if not user.is_admin():
             return
         if not message.reply_to_message:
@@ -122,16 +122,26 @@ class Bot:
         # TODO: maybe replace with database UI
         file = self._bot.download_file(file_info.file_path)
         if file_info.file_path.endswith(".csv"):
-            df = pd.read_csv(BytesIO(file))
-        elif file_info.file_path.endswith(".xlsx"):
-            df = pd.read_excel(BytesIO(file))
+            try:
+                df = pd.read_csv(BytesIO(file), dtype=str)
+            except pd.errors.EmptyDataError as e:
+                self._bot.send_message(message.chat.id, "Empty file")
+                return
+            except Exception as e:
+                self._bot.send_message(
+                    message.chat.id, "Bad file format, unknown error"
+                )
+                return
         else:
             self._bot.send_message(message.chat.id, "Bad file format")
             return
-        if df.columns != ["Цитаты"]:
+        column = "Цитаты"
+        if df.columns.shape != (1,) or df.columns != [column]:
             self._bot.send_message(
-                message.chat.id, "Bad file format, expected 1 column 'Цитаты'"
+                message.chat.id, f"Bad file format, expected 1 column '{column}'"
             )
+            return
+        df = df.fillna("")
         phrases = df["Цитаты"].tolist()
         self._phrases_service.add_phrases(session, phrases)
         self.wait_for_file[message.chat.id] = None

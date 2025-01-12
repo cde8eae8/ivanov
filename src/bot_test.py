@@ -133,9 +133,10 @@ def test_bot_add_phrases(testing_db, bot_environment):
     bot.add_file(
         "phrases1.csv",
         """Цитаты
-phrase1
-phrase2
-phrase3
+1
+2
+3
+""
 """.encode(
             "utf-8"
         ),
@@ -143,10 +144,13 @@ phrase3
     bot.add_file(
         "phrases2.csv",
         """Цитаты
-phrase5
-phrase1
-phrase3
-phrase4
+5
+1
+3
+4
+""
+""
+5
 """.encode(
             "utf-8"
         ),
@@ -170,7 +174,7 @@ phrase4
     )
 
     phrases = set(p.text for p in session.query(models.Phrase).all())
-    assert phrases == {"phrase1", "phrase2", "phrase3"}
+    assert phrases == {"1", "2", "3"}
 
     bot.user_message(admin, "edit")
     bot.user_message(
@@ -178,7 +182,7 @@ phrase4
     )
 
     phrases = set(p.text for p in session.query(models.Phrase).all())
-    assert phrases == {"phrase1", "phrase2", "phrase3"}
+    assert phrases == {"1", "2", "3"}
 
     bot.user_message(admin, "edit")
     bot.user_message(
@@ -186,4 +190,117 @@ phrase4
     )
 
     phrases = set(p.text for p in session.query(models.Phrase).all())
-    assert phrases == {"phrase1", "phrase2", "phrase3", "phrase4", "phrase5"}
+    assert phrases == {"1", "2", "3", "4", "5"}
+
+
+def test_bot_add_phrases_errors_no_message_to_reply(testing_db, bot_environment):
+    bot = bot_environment.bot
+
+    admin = 1000
+    session = testing_db.session()
+    session.add(models.User(chat_id=admin, _is_admin=True, _send_phrases=False))
+    session.commit()
+
+    message = bot.user_message(admin, "some message")
+    bot.user_message(admin, reply_to=message, file=test.bot.File("phrases2.csv"))
+
+    message = bot.user_message(admin, "edit")
+    bot.user_message(admin, "edit")
+
+    bot.user_message(admin, reply_to=message, file=test.bot.File("phrases2.csv"))
+    assert bot.chats[admin] == [
+        "Has no active edit request, send /edit command again",
+        "Reply to this message with a table with new phrases",
+        "Reply to this message with a table with new phrases",
+        "Active edit request is bound to another message, send /edit command again",
+    ]
+
+
+def test_bot_add_phrases_errors_bad_file_format(testing_db, bot_environment):
+    bot = bot_environment.bot
+
+    @dataclasses.dataclass
+    class TestCase:
+        filename: str
+        content: bytes | str
+        expected_error: str = None
+
+    test_cases = [
+        TestCase("not_csv", bytes([255] * 10), "Bad file format"),
+        TestCase("not_csv.csv", bytes([255] * 10), "Bad file format, unknown error"),
+        TestCase(
+            "2_columns.csv",
+            "Цитаты,1".encode("utf-8"),
+            "Bad file format, expected 1 column 'Цитаты'",
+        ),
+        TestCase(
+            "bad_column.csv",
+            "Цитаты1".encode("utf-8"),
+            "Bad file format, expected 1 column 'Цитаты'",
+        ),
+        TestCase("empty.csv", "".encode("utf-8"), "Empty file"),
+        TestCase("big_file.csv", bytes([0] * 1024 * 1024), "File is too big"),
+    ]
+
+    admin = 1000
+    session = testing_db.session()
+    session.add(models.User(chat_id=admin, _is_admin=True, _send_phrases=False))
+    session.commit()
+
+    n_messages = 0
+    for test_case in test_cases:
+        file_content = test_case.content
+        if isinstance(file_content, str):
+            file_content = file_content.encode("utf-8")
+        bot.add_file(test_case.filename, file_content)
+        bot.user_message(admin, "edit")
+        bot.user_message(
+            admin,
+            reply_to=bot.full_chats[admin][-1],
+            file=test.bot.File(test_case.filename),
+        )
+        n_messages += 2
+        assert len(bot.chats[admin]) == n_messages
+        assert bot.chats[admin][-1] == test_case.expected_error
+        assert not session.query(models.Phrase).all()
+
+
+def test_bot_add_phrases_no_phrases(testing_db, bot_environment):
+    bot = bot_environment.bot
+
+    @dataclasses.dataclass
+    class TestCase:
+        filename: str
+        content: bytes | str
+
+    test_cases = [
+        TestCase(
+            "no_rows.csv",
+            "Цитаты".encode("utf-8"),
+        ),
+        TestCase(
+            "no_rows2.csv",
+            'Цитаты\n""\n""'.encode("utf-8"),
+        ),
+    ]
+
+    admin = 1000
+    session = testing_db.session()
+    session.add(models.User(chat_id=admin, _is_admin=True, _send_phrases=False))
+    session.commit()
+
+    n_messages = 0
+    for test_case in test_cases:
+        file_content = test_case.content
+        if isinstance(file_content, str):
+            file_content = file_content.encode("utf-8")
+        bot.add_file(test_case.filename, file_content)
+        bot.user_message(admin, "edit")
+        bot.user_message(
+            admin,
+            reply_to=bot.full_chats[admin][-1],
+            file=test.bot.File(test_case.filename),
+        )
+        n_messages += 1
+        assert len(bot.chats[admin]) == n_messages
+        assert not session.query(models.Phrase).all()

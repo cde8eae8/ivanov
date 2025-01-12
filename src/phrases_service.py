@@ -7,6 +7,7 @@ from sqlalchemy.orm import aliased
 
 class PhrasesService:
     def add_phrases(self, session: Session, new_phrases: list[str]):
+        new_phrases = set(p for p in new_phrases if isinstance(p, str) and p)
         old_phrases = set(phrase.text for phrase in self.get_phrases(session))
         phrases_to_insert = set()
         for phrase in new_phrases:
