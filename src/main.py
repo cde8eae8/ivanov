@@ -44,7 +44,7 @@ def expected_exception(exception: Exception):
                     f.seek(-read_size, os.SEEK_END)
                     logs.append(f.read(read_size).decode('utf-8', 'replace'))
             except Exception as e:
-                logs.append(f'failed to read log file {''.join(traceback.format_exception(e))}')
+                logs.append(f'failed to read log file {"".join(traceback.format_exception(e))}')
     return error_handler.ExceptionInfo(
         exception, 
         True,
@@ -137,7 +137,7 @@ class App:
                     "Ivanov bot error"),
             )
         self._config.working_dir.mkdir(exist_ok=True)
-        self._engine = models.init_db(f"sqlite:///{self._config.working_dir / "iv.db"}")
+        self._engine = models.init_db(f"sqlite:///{self._config.working_dir / 'iv.db'}")
         self._create_session = scoped_session(sessionmaker(self._engine))
         self._user_service = US.UserService()
         self._error_handlers.add_handler(
