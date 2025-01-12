@@ -8,9 +8,11 @@ from email.mime.image import MIMEImage
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
+
 class Content:
     filename: str
     content: str
+
 
 class Mail:
     def __init__(self, addr_from, password, addr_to, subject, text):
@@ -24,7 +26,7 @@ class Mail:
         msg.attach(MIMEText(text, "plain"))
         self.msg = msg
 
-    def add_attachment(self, path=None, content:Content|None=None):
+    def add_attachment(self, path=None, content: Content | None = None):
         assert bool(path) ^ bool(content)
         if content:
             file = MIMEText(content.content)

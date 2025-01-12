@@ -3,24 +3,28 @@ import collections
 import dataclasses
 import typing
 
+
 @dataclasses.dataclass
 class Chat:
     id: int
 
+
 @dataclasses.dataclass
 class File:
     file_id: str
+
 
 @dataclasses.dataclass
 class FileInfo:
     file_id: str
     _content: bytes
     file_size: int = 0
-    file_path: str = ''
+    file_path: str = ""
 
     def __post_init__(self):
         self.file_size = len(self._content)
-        self.file_path = 'file/' + self.file_id
+        self.file_path = "file/" + self.file_id
+
 
 @dataclasses.dataclass
 class Message:
@@ -30,10 +34,12 @@ class Message:
     reply_to_message: typing.Optional["Message"] = None
     document: File | None = None
 
+
 class MockTelebotObserver:
     @abc.abstractmethod
     def on_message(self, sent_by_bot: bool, message: Message):
         pass
+
 
 class MockTelebot:
     def __init__(self):
@@ -50,7 +56,9 @@ class MockTelebot:
 
     def message_handler(self, commands=None, func=None, content_types=None):
         content_types = content_types or []
-        return lambda handler: self.handlers.append((commands, func, content_types, handler))
+        return lambda handler: self.handlers.append(
+            (commands, func, content_types, handler)
+        )
 
     def send_message(self, chat_id, text):
         self.chats[chat_id].append(text)
@@ -71,10 +79,15 @@ class MockTelebot:
 
     def user_message(self, chat_id, text=None, reply_to=None, file=None):
         for commands, func, content_types, handler in self.handlers:
-            message = Message(-1-len(self.chats[chat_id]), Chat(chat_id), reply_to_message=reply_to, document=file)
+            message = Message(
+                -1 - len(self.chats[chat_id]),
+                Chat(chat_id),
+                reply_to_message=reply_to,
+                document=file,
+            )
             message_content_types = []
             if message.document:
-                message_content_types.append('document')
+                message_content_types.append("document")
             if content_types != message_content_types:
                 continue
             if commands and text in commands:
@@ -91,8 +104,8 @@ class MockTelebot:
         return self.files[file_id]
 
     def download_file(self, file_path: str):
-        assert file_path.startswith('file/')
-        file_id = file_path[len('file/'):]
+        assert file_path.startswith("file/")
+        file_id = file_path[len("file/") :]
         return self.files[file_id]._content
 
     def _notify(self, f):
