@@ -22,7 +22,7 @@ def collect_files(project_dir):
         relpath = abspath.relative_to(project_dir)
         if any(part.startswith(".") for part in relpath.parts):
             return False
-        for dir in ("__pycache__",):
+        for dir in ("__pycache__", "htmlcov"):
             if dir in relpath.parts:
                 return False
         for name_regexp in (
@@ -30,6 +30,7 @@ def collect_files(project_dir):
             r"requirements\.txt",
             r"requirements-dev\.txt",
             r"VERSION",
+            r"pytest.ini",
         ):
             if re.match(name_regexp, abspath.name):
                 return True
@@ -62,15 +63,49 @@ def send_archive_and_script(archive_path, target_dir, ssh):
     if ssh:
         with SCPClient(ssh.get_transport()) as scp:
             for src, dst in src_to_dst:
-                scp.put(src, pathlib.PurePosixPath(dst))
+                dst = pathlib.PurePosixPath(dst)
+                logging.info("send %s -> %s", src, dst)
+                scp.put(src, dst)
     else:
         for src, dst in src_to_dst:
+            logging.info("send %s -> %s", src, dst)
             shutil.copyfile(src, dst)
 
 
 def extract_archive(bot_path, archive_path):
     with zipfile.ZipFile(archive_path, "r") as zip:
         zip.extractall(bot_path)
+
+
+def check_ssh_command(channel: "paramiko.Channel", command):
+    code = ssh_command(channel, command)
+    if code != 0:
+        raise RuntimeError(f"Command failed to execute with code {code}.\n$ {command}")
+
+
+def ssh_command(channel: "paramiko.Channel", command):
+    command = shlex.join(command)
+    logging.info("----- REMOTE OUTPUT: BEGIN -----")
+    channel.exec_command(command)
+    while True:
+        rl, _, _ = select.select([channel], [], [], 1.0)
+        if len(rl) > 0:
+            # Must be stdout
+            text = channel.recv(1024)
+            if not text:
+                break
+            out = sys.stdout
+            out.buffer.write(text)
+            out.buffer.flush()
+    logging.info("----- REMOTE STDERR: BEGIN -----")
+    while True:
+        text = channel.recv_stderr(1024)
+        if not text:
+            break
+        sys.stderr.buffer.write(text)
+
+    logging.info("----- REMOTE OUTPUT: END -----")
+    return channel.recv_exit_status()
 
 
 def run_remote_deploy(python_exe, target_dir, ssh):
@@ -89,19 +124,7 @@ def run_remote_deploy(python_exe, target_dir, ssh):
         assert target_dir.is_absolute()
         transport = ssh.get_transport()
         channel = transport.open_session()
-        channel.exec_command(shlex.join(unpack_command))
-        logging.info("----- REMOTE OUTPUT: BEGIN -----")
-        while True:
-            rl, _, _ = select.select([channel], [], [], 1.0)
-            if len(rl) > 0:
-                # Must be stdout
-                text = channel.recv(1024)
-                if not text:
-                    break
-                out = sys.stdout
-                out.buffer.write(text)
-                out.buffer.flush()
-        logging.info("----- REMOTE OUTPUTE: END-----")
+        check_ssh_command(channel, unpack_command)
     else:
         subprocess.check_call(unpack_command)
 
@@ -150,9 +173,10 @@ def local_main(args):
         ssh = None
         if args.target_machine != "localhost":
             ssh = connect_ssh(args.target_machine)
-            ssh.exec_command(
-                shlex.join(["mkdir", str(pathlib.PurePosixPath(args.target_dir))])
-            )
+            logging.info("mkdir %s", pathlib.PurePosixPath(args.target_dir))
+            transport = ssh.get_transport()
+            channel = transport.open_session()
+            ssh_command(channel, ["mkdir", str(pathlib.PurePosixPath(args.target_dir))])
         else:
             args.target_dir.mkdir(exist_ok=True)
         send_archive_and_script(archive_path, args.target_dir, ssh)

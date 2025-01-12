@@ -9,11 +9,18 @@ import sys
 
 
 def start(args):
+    processes = find_processes()
+    if processes:
+        print("bot is already running")
+        return
     env = dict(os.environ)
     if args.config:
         env["IVANOV_CONFIG"] = args.config
     main_script = pathlib.Path(args.cwd) / "src" / "main.py"
-    subprocess.check_call([sys.executable, main_script], cwd=args.cwd, env=env)
+    executor = subprocess.check_call
+    if args.background:
+        executor = subprocess.Popen
+    executor([sys.executable, main_script], cwd=args.cwd, env=env)
 
 
 def check_if_target(command_line, cwd):
@@ -26,10 +33,10 @@ def check_if_target(command_line, cwd):
         script = cwd / script
     assert script.is_absolute()
     script = script.resolve()
-    return script.parts[-3:] == ("ivanov_bot", "src", "main.py")
+    return script.parts[-2:] == ("src", "main.py")
 
 
-def stop(args):
+def find_processes():
     processes = []
     for proc in psutil.process_iter(attrs=["pid", "name", "cmdline", "cwd"]):
         if check_if_target(proc.info["cmdline"], proc.info["cwd"]):
@@ -37,12 +44,17 @@ def stop(args):
             p = psutil.Process(pid)
             print(f"found {pid}: {proc.info['cmdline']}")
             processes.append(p)
+    return processes
+
+
+def stop(args):
+    processes = find_processes()
     for p in processes:
         print(f"sending stop signal to {p.pid}")
         if sys.platform == "win32":
             p.terminate()
         else:
-            p.send_signal(signal.SIG_INT)
+            p.send_signal(signal.SIGINT)
     for _ in range(20):
         if all(not p.is_running() for p in processes):
             return
@@ -60,13 +72,10 @@ def main():
     start_parser.add_argument(
         "-C", default=pathlib.Path(__file__).parent.parent, dest="cwd"
     )
+    start_parser.add_argument("--background", action="store_true")
     start_parser.add_argument("--config")
 
     stop_parser = subparsers.add_parser("stop")
-    stop_parser.add_argument(
-        "-C", default=pathlib.Path(__file__).parent.parent, dest="cwd"
-    )
-    stop_parser.add_argument("--all")
 
     args = parser.parse_args()
 
