@@ -2,10 +2,11 @@ import logging
 import typing
 import uuid
 import enum
-from sqlalchemy import PrimaryKeyConstraint, Table
+import datetime as dt
+from sqlalchemy import PrimaryKeyConstraint, func
 from sqlalchemy import StaticPool
 from sqlalchemy import create_engine
-from sqlalchemy import Column
+from sqlalchemy import DateTime
 from sqlalchemy import ForeignKey
 from sqlalchemy import String
 from sqlalchemy import Uuid
@@ -35,6 +36,10 @@ class User(Base):
         Uuid(), primary_key=True, default=uuid.uuid4, index=True
     )
     chat_id: Mapped[int] = mapped_column(unique=True, nullable=False, index=True)
+    username: Mapped[str] = mapped_column(String(100), nullable=True)
+    time_created: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
     _is_admin: Mapped[bool] = mapped_column(default=False, nullable=False)
     _send_phrases: Mapped[bool] = mapped_column(default=False, nullable=False)
 
@@ -69,6 +74,9 @@ class User(Base):
 
 class Phrase(Base):
     __tablename__ = "phrase"
+    time_created: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(
         Uuid(), primary_key=True, default=uuid.uuid4, nullable=False, index=True
@@ -76,13 +84,16 @@ class Phrase(Base):
     text: Mapped[str] = mapped_column(String(100000), unique=True, nullable=False)
 
 
-UsedPhrases = Table(
-    "used_phrases",
-    Base.metadata,
-    Column("user_id", ForeignKey("user_account.id"), nullable=False),
-    Column("phrase_id", ForeignKey("phrase.id"), nullable=False),
-    PrimaryKeyConstraint("user_id", "phrase_id", name="used_phrases"),
-)
+class UsedPhrases(Base):
+    __tablename__ = "used_phrases"
+    user_id = mapped_column(ForeignKey("user_account.id"), nullable=False)
+    phrase_id = mapped_column(ForeignKey("phrase.id"), nullable=False)
+    time_created: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    __table_args__ = (
+        PrimaryKeyConstraint("user_id", "phrase_id", name="used_phrases"),
+    )
 
 
 def _common_db_init(engine):
